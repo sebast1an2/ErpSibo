@@ -1,0 +1,166 @@
+# ============================================================================
+# SIBO ERP — Orquestación de servicios (Docker Compose)
+# ============================================================================
+# Este archivo declara TODOS los contenedores del stack y cómo se conectan.
+# Un solo "make up" levanta el conjunto, ya enlazado por la red interna de Docker
+# (cada servicio se alcanza por su NOMBRE: db, redis, minio, web...).
+#
+# Variables sensibles/de entorno se leen de .env (ver .env.example).
+# ----------------------------------------------------------------------------
+
+services:
+
+  # --------------------------------------------------------------------------
+  # db — Base de datos PostgreSQL 16.
+  # Es el corazón del multitenancy: un único Postgres con un schema por tenant.
+  # --------------------------------------------------------------------------
+  db:
+    image: postgres:16
+    container_name: sibo_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      # Volumen persistente: los datos sobreviven aunque se borre el contenedor.
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      # Se expone 5432 al host SOLO para inspección local (DBeaver, psql, etc.).
+      # Entre contenedores, db se alcanza por el nombre "db", no por este puerto.
+      - "5432:5432"
+    healthcheck:
+      # Permite que "web" espere a que Postgres esté realmente listo para aceptar conexiones.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # redis — Almacén en memoria (Redis 7).
+  # Hoy: cache. Futuro: broker/result-backend de Celery (tareas async).
+  # --------------------------------------------------------------------------
+  redis:
+    image: redis:7
+    container_name: sibo_redis
+    volumes:
+      - redis_data:/data
+    # No se expone puerto al host: solo lo consumen otros contenedores.
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # minio — Almacenamiento de objetos compatible con S3 (archivos/uploads).
+  # API en 9000, consola web de administración en 9001.
+  # --------------------------------------------------------------------------
+  minio:
+    image: minio/minio:latest
+    container_name: sibo_minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"   # API S3
+      - "9001:9001"   # Consola web (navegador): http://localhost:9001
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # web — Aplicación Django (servida por Gunicorn a partir del Bloque 0.2).
+  # Se construye desde backend/Dockerfile.
+  # --------------------------------------------------------------------------
+  web:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sibo_web
+    # NOTA (Bloque 0.1): todavía NO existe proyecto Django, así que arrancar
+    # Gunicorn/runserver fallaría. Para que el contenedor quede VIVO y se pueda
+    # inspeccionar, se usa un comando temporal que no termina nunca.
+    # En el Bloque 0.2 se reemplaza por el arranque real de Django.
+    command: tail -f /dev/null
+    volumes:
+      # Monta el código local dentro del contenedor -> hot-reload al editar.
+      - ./backend:/app
+      # Estáticos y media compartidos con nginx (se llenan en bloques posteriores).
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    env_file:
+      - .env
+    expose:
+      # 8000 queda accesible para nginx dentro de la red Docker, no al host directo.
+      - "8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # nginx — Reverse proxy y servidor de estáticos al frente de Django.
+  # Es la única puerta de entrada HTTP desde el navegador (puerto 80).
+  # --------------------------------------------------------------------------
+  nginx:
+    image: nginx:1.27
+    container_name: sibo_nginx
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # Mismos volúmenes que web, en modo lectura, para servir estáticos/media.
+      - static_volume:/app/staticfiles:ro
+      - media_volume:/app/media:ro
+    ports:
+      - "80:80"
+    depends_on:
+      - web
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # celery_worker / celery_beat — RESERVADOS (se activan en sprints futuros,
+  # cuando existan tareas asíncronas). Se dejan comentados y listos.
+  # --------------------------------------------------------------------------
+  # celery_worker:
+  #   build:
+  #     context: ./backend
+  #     dockerfile: Dockerfile
+  #   container_name: sibo_celery_worker
+  #   command: celery -A config worker -l info
+  #   volumes:
+  #     - ./backend:/app
+  #   env_file:
+  #     - .env
+  #   depends_on:
+  #     - db
+  #     - redis
+  #   restart: unless-stopped
+  #
+  # celery_beat:
+  #   build:
+  #     context: ./backend
+  #     dockerfile: Dockerfile
+  #   container_name: sibo_celery_beat
+  #   command: celery -A config beat -l info
+  #   volumes:
+  #     - ./backend:/app
+  #   env_file:
+  #     - .env
+  #   depends_on:
+  #     - db
+  #     - redis
+  #   restart: unless-stopped
+
+# ----------------------------------------------------------------------------
+# Volúmenes con nombre: persisten datos entre reinicios/recreaciones de contenedor.
+# ----------------------------------------------------------------------------
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  static_volume:
+  media_volume:

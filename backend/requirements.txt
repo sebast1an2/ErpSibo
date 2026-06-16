@@ -1,0 +1,40 @@
+# ============================================================================
+# SIBO ERP — Dependencias Python (backend)
+# ============================================================================
+# Versiones FIJADAS y verificadas como compatibles entre sí.
+#
+# Compatibilidad clave: django-tenants 3.7.0 soporta Django 4.2 – 5.1.
+# Por eso se fija Django en la serie 5.1 (no 5.2) para no romper django-tenants.
+# Si en el futuro django-tenants publica soporte de Django 5.2, se puede subir.
+# ----------------------------------------------------------------------------
+
+# --- Framework web ---
+Django==5.1.5
+
+# --- API REST (se usará en sprints posteriores; ya queda disponible) ---
+djangorestframework==3.15.2
+
+# --- Multitenancy schema-per-tenant (núcleo de la arquitectura) ---
+django-tenants==3.7.0
+
+# --- Driver PostgreSQL.
+#     Se usa la variante -binary para no compilar desde fuente en el contenedor. ---
+psycopg2-binary==2.9.10
+
+# --- Servidor de aplicaciones WSGI para producción (y para web tras el Bloque 0.2) ---
+gunicorn==23.0.0
+
+# --- Lectura de configuración/secretos desde .env (settings por entorno) ---
+python-decouple==3.8
+
+# --- Cliente Redis (cache / broker de Celery a futuro) ---
+redis==5.2.1
+
+# --- Almacenamiento de archivos en MinIO ---
+#     DECISIÓN: se usa django-minio-storage (no boto3 directo).
+#     Razón: se integra como STORAGE backend nativo de Django (DEFAULT_FILE_STORAGE),
+#     así el código de modelos usa FileField/ImageField normal sin acoplarse a S3.
+#     El aislamiento por tenant (prefijo <schema_name>/) se resuelve en la capa de
+#     storage en un bloque posterior. boto3 daría más control de bajo nivel pero
+#     obligaría a escribir manualmente la integración con Django; innecesario aquí.
+django-minio-storage==0.5.7

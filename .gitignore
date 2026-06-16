@@ -1,0 +1,43 @@
+# ============================================================================
+# SIBO ERP — .gitignore
+# ============================================================================
+
+# --- Secretos / entorno ---
+.env
+.env.*
+!.env.example
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+*.egg
+
+# --- Entornos virtuales ---
+venv/
+.venv/
+env/
+
+# --- Django ---
+*.log
+*.sqlite3
+*.sqlite3-journal
+/staticfiles/
+/media/
+backend/staticfiles/
+backend/media/
+
+# --- Docker ---
+# (los volúmenes viven gestionados por Docker, no en el repo)
+
+# --- IDE / editor ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- Sistema operativo ---
+.DS_Store
+Thumbs.db
