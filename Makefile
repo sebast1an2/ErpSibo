@@ -7,7 +7,7 @@
 # .PHONY: estos nombres no son archivos, son comandos. Evita conflictos si
 # alguna vez existiera un archivo llamado "build", "up", etc.
 .PHONY: build up down logs ps \
-        manage migrate makemigrations shell createsuperuser bootstrap
+        manage migrate makemigrations shell createsuperuser bootstrap seed-planes
 
 # Construye (o reconstruye) las imágenes del stack, principalmente la de "web".
 build:
@@ -45,6 +45,11 @@ manage:
 # `make migrate`. Dominio alterno: make bootstrap dom="midominio.com"
 bootstrap:
 	docker compose exec web python manage.py bootstrap_public_tenant $(if $(dom),--domain $(dom),)
+
+# Crea (idempotente) el catálogo de módulos y los planes base (esencial/
+# profesional/full placeholder). Datos de plataforma -> schema public.
+seed-planes:
+	docker compose exec web python manage.py seed_planes
 
 # Migraciones multitenant (django-tenants), en el orden correcto:
 #   1) --shared : apps de SHARED_APPS sobre el schema public (plataforma).
