@@ -80,11 +80,14 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: sibo_web
-    # NOTA (Bloque 0.1): todavía NO existe proyecto Django, así que arrancar
-    # Gunicorn/runserver fallaría. Para que el contenedor quede VIVO y se pueda
-    # inspeccionar, se usa un comando temporal que no termina nunca.
-    # En el Bloque 0.2 se reemplaza por el arranque real de Django.
-    command: tail -f /dev/null
+    # Bloque 0.2: arranque REAL de Django con el servidor de desarrollo.
+    # runserver recarga en caliente al editar (el código está montado como
+    # volumen). Escucha en 0.0.0.0:8000 para ser alcanzable por nginx dentro
+    # de la red Docker.
+    # En PRODUCCIÓN se usa Gunicorn con los settings de producción, p.ej.:
+    #   gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3
+    #   (con DJANGO_SETTINGS_MODULE=config.settings.production)
+    command: python manage.py runserver 0.0.0.0:8000
     volumes:
       # Monta el código local dentro del contenedor -> hot-reload al editar.
       - ./backend:/app
